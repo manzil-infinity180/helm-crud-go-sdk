@@ -1,5 +1,5 @@
 .vscode 
 .idea 
 /vendor/
-./helm-crud-go-sdk
+helm-crud-go-sdk
 
