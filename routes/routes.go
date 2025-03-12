@@ -12,6 +12,7 @@ func setupHelmReleaseRoutes(router *gin.Engine) {
 	router.PUT("/api/helm", helm.UpgradeChart)
 	router.DELETE("/api/helm", helm.DeleteChart)
 	router.PUT("/api/helm/version", helm.RollbackChart)
+	router.POST("/api/remote", helm.InstallHelmChartFromRemoteUrl)
 }
 
 func SetupRoutes(router *gin.Engine) {

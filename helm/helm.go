@@ -2,6 +2,9 @@ package helm
 
 import (
 	"fmt"
+	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/release"
+	"helm.sh/helm/v3/pkg/storage/driver"
 	"log"
 	"net/http"
 	"os"
@@ -79,6 +82,86 @@ installClient.ChartPathOptions.RepoURL = "https://charts.bitnami.com/bitnami"
 release, err := installClient.Run("nginx", nil) // Install the Nginx Helm chart
 */
 
+func InstallHelmChartFromRemoteUrl(c *gin.Context) {
+	rel, err := installOrUpgradeRelease("hello-nginxx", "https://charts.bitnami.com/bitnami", "nginx", nil, "default")
+	//rel, err := installOrUpgradeRelease2("add-wds6",
+	//	"oci://ghcr.io/kubestellar/kubestellar/core-chart",
+	//	"0.26.0",
+	//	map[string]interface{}{
+	//		"kubeflex-operator.install": false,
+	//		"InstallPCHs":               false,
+	//		"WDSes":                     []map[string]string{{"name": "wds6"}},
+	//	}, "default",
+	//)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err,
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"release": rel,
+	})
+}
+func installOrUpgradeRelease(releaseName string, repoUrl string, chartName string, values map[string]interface{}, targetNamespace string) (*release.Release, error) {
+	settings := cli.New()
+	//actionConfig, err := initActionConfig(settings, "default", "kind-kubeflex")
+	actionConfig, err := initActionConfig(settings, "default", "wds1")
+	if err != nil {
+		return nil, err
+	}
+
+	var chartPathOptions action.ChartPathOptions = action.ChartPathOptions{
+		RepoURL: repoUrl,
+	}
+
+	chart, err := getChart(chartPathOptions, chartName, settings)
+	fmt.Println(chart)
+	if err != nil {
+		return nil, err
+	}
+
+	var rel *release.Release
+	var requestError error
+
+	histClient := action.NewHistory(actionConfig)
+	histClient.Max = 1
+	if _, err := histClient.Run(releaseName); err == driver.ErrReleaseNotFound {
+		clientInstall := action.NewInstall(actionConfig)
+		clientInstall.ReleaseName = releaseName
+		clientInstall.Namespace = targetNamespace
+		clientInstall.ChartPathOptions = chartPathOptions
+
+		fmt.Println(clientInstall)
+
+		rel, requestError = clientInstall.Run(chart, values)
+	} else {
+		clientUpgrade := action.NewUpgrade(actionConfig)
+		clientUpgrade.Namespace = targetNamespace
+		clientUpgrade.ChartPathOptions = chartPathOptions
+
+		fmt.Println(clientUpgrade)
+
+		rel, requestError = clientUpgrade.Run(releaseName, chart, values)
+	}
+
+	return rel, requestError
+}
+
+func getChart(chartPathOption action.ChartPathOptions, chartName string, settings *cli.EnvSettings) (*chart.Chart, error) {
+	chartPath, err := chartPathOption.LocateChart(chartName, settings)
+	if err != nil {
+		return nil, err
+	}
+
+	chart, err := loader.Load(chartPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return chart, nil
+}
+
 func InstallHelmChart(c *gin.Context) {
 	settings := cli.New()
 
@@ -108,7 +191,7 @@ func InstallHelmChart(c *gin.Context) {
 	client.ReleaseName = params.ReleaseName
 	client.Namespace = params.Namespace
 
-	chart, err := loader.Load(params.ChartPath)
+	chart, err := loader.Load(params.ChartPath) // it will locally load the helm chart file
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": "issue while loading the chartPath",
